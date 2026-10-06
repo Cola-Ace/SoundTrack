@@ -2,7 +2,7 @@
 compile_error!("the Process Loopback prototype requires Windows");
 
 #[cfg(windows)]
-mod capture;
+use soundtrack_audio_capture::{capture, write_wav};
 
 #[cfg(windows)]
 fn main() {
@@ -37,8 +37,8 @@ fn run() -> Result<(), String> {
     );
   }
 
-  let samples = capture::capture(pid, seconds)?;
-  capture::write_wav(&output_path, &samples)?;
+  let samples = capture(pid, seconds)?;
+  write_wav(&output_path, &samples)?;
 
   let peak = samples
     .iter()

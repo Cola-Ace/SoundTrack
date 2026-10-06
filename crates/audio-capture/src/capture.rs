@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT};
@@ -27,7 +28,7 @@ const MAX_CAPTURE_SECONDS: u32 =
 
 #[implement(IActivateAudioInterfaceCompletionHandler)]
 struct ActivationHandler {
-  event: HANDLE,
+  event: Arc<EventHandle>,
 }
 
 impl IActivateAudioInterfaceCompletionHandler_Impl for ActivationHandler_Impl {
@@ -35,7 +36,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for ActivationHandler_Impl {
     &self,
     _operation: Ref<'_, IActivateAudioInterfaceAsyncOperation>,
   ) -> windows::core::Result<()> {
-    unsafe { SetEvent(self.event) }?;
+    unsafe { SetEvent(self.event.0) }?;
     Ok(())
   }
 }
@@ -53,6 +54,25 @@ pub fn capture(pid: u32, seconds: u32) -> Result<Vec<f32>, String> {
     return Err(format!(
       "capture duration must be between 1 and {MAX_CAPTURE_SECONDS} seconds"
     ));
+  }
+
+  let deadline = Instant::now() + Duration::from_secs(seconds as u64);
+  let mut samples = Vec::with_capacity(seconds as usize * SAMPLE_RATE as usize * CHANNELS as usize);
+  capture_stream(
+    pid,
+    || Instant::now() < deadline,
+    |_, packet| samples.extend_from_slice(packet),
+  )?;
+  Ok(samples)
+}
+
+pub fn capture_stream(
+  pid: u32,
+  mut should_continue: impl FnMut() -> bool,
+  mut on_packet: impl FnMut(u64, &[f32]),
+) -> Result<(), String> {
+  if pid == 0 {
+    return Err("PID must be greater than zero".to_string());
   }
 
   unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
@@ -80,8 +100,11 @@ pub fn capture(pid: u32, seconds: u32) -> Result<Vec<f32>, String> {
 
   let event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
     .map_err(|error| format!("CreateEventW: {error}"))?;
-  let _event_guard = EventGuard(event);
-  let handler: IActivateAudioInterfaceCompletionHandler = ActivationHandler { event }.into();
+  let event = Arc::new(EventHandle(event));
+  let handler: IActivateAudioInterfaceCompletionHandler = ActivationHandler {
+    event: event.clone(),
+  }
+  .into();
   let operation = unsafe {
     ActivateAudioInterfaceAsync(
       VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
@@ -92,7 +115,7 @@ pub fn capture(pid: u32, seconds: u32) -> Result<Vec<f32>, String> {
   }
   .map_err(|error| format!("ActivateAudioInterfaceAsync: {error}"))?;
 
-  let activation_wait = unsafe { WaitForSingleObject(event, 5_000) };
+  let activation_wait = unsafe { WaitForSingleObject(event.0, 5_000) };
   if activation_wait == WAIT_TIMEOUT {
     return Err("Process Loopback activation timed out".to_string());
   }
@@ -137,57 +160,79 @@ pub fn capture(pid: u32, seconds: u32) -> Result<Vec<f32>, String> {
     )
   }
   .map_err(|error| format!("IAudioClient::Initialize: {error}"))?;
-  unsafe { audio_client.SetEventHandle(event) }
+  unsafe { audio_client.SetEventHandle(event.0) }
     .map_err(|error| format!("IAudioClient::SetEventHandle: {error}"))?;
   let capture_client: IAudioCaptureClient = unsafe { audio_client.GetService() }
     .map_err(|error| format!("IAudioClient::GetService: {error}"))?;
   unsafe { audio_client.Start() }.map_err(|error| format!("IAudioClient::Start: {error}"))?;
-
-  let deadline = Instant::now() + Duration::from_secs(seconds as u64);
-  let mut samples = Vec::with_capacity(seconds as usize * SAMPLE_RATE as usize * CHANNELS as usize);
-  while Instant::now() < deadline {
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    let timeout = remaining.as_millis().clamp(1, 1_000) as u32;
-    let wait_status = unsafe { WaitForSingleObject(event, timeout) };
-    if wait_status == WAIT_TIMEOUT {
-      continue;
-    }
-    if wait_status != WAIT_OBJECT_0 {
-      return Err(format!(
-        "Audio capture wait failed (status 0x{:08X})",
-        wait_status.0
-      ));
-    }
-
-    loop {
-      let packet_frames = unsafe { capture_client.GetNextPacketSize() }
-        .map_err(|error| format!("IAudioCaptureClient::GetNextPacketSize: {error}"))?;
-      if packet_frames == 0 {
-        break;
+  let stop_guard = AudioClientStopGuard {
+    client: &audio_client,
+    stopped: false,
+  };
+  let capture_result = (|| {
+    while should_continue() {
+      let timeout = 200;
+      let wait_status = unsafe { WaitForSingleObject(event.0, timeout) };
+      if wait_status == WAIT_TIMEOUT {
+        continue;
+      }
+      if wait_status != WAIT_OBJECT_0 {
+        return Err(format!(
+          "Audio capture wait failed (status 0x{:08X})",
+          wait_status.0
+        ));
       }
 
-      let mut data = std::ptr::null_mut();
-      let mut frames = 0;
-      let mut flags = 0;
-      unsafe { capture_client.GetBuffer(&mut data, &mut frames, &mut flags, None, None) }
+      loop {
+        let packet_frames = unsafe { capture_client.GetNextPacketSize() }
+          .map_err(|error| format!("IAudioCaptureClient::GetNextPacketSize: {error}"))?;
+        if packet_frames == 0 {
+          break;
+        }
+
+        let mut data = std::ptr::null_mut();
+        let mut frames = 0;
+        let mut flags = 0;
+        let mut device_position = 0;
+        let mut qpc_position = 0;
+        unsafe {
+          capture_client.GetBuffer(
+            &mut data,
+            &mut frames,
+            &mut flags,
+            Some(&mut device_position),
+            Some(&mut qpc_position),
+          )
+        }
         .map_err(|error| format!("IAudioCaptureClient::GetBuffer: {error}"))?;
 
-      let sample_count = frames as usize * CHANNELS as usize;
-      if flags as i32 & AUDCLNT_BUFFERFLAGS_SILENT.0 != 0 {
-        samples.resize(samples.len() + sample_count, 0.0);
-      } else if !data.is_null() {
-        let packet = unsafe { std::slice::from_raw_parts(data.cast::<f32>(), sample_count) };
-        samples.extend_from_slice(packet);
-      } else {
-        return Err("WASAPI returned a null buffer for a non-silent packet".to_string());
+        let sample_count = frames as usize * CHANNELS as usize;
+        let buffer_guard = CaptureBufferGuard {
+          client: &capture_client,
+          frames,
+          released: false,
+        };
+        if flags as i32 & AUDCLNT_BUFFERFLAGS_SILENT.0 != 0 {
+          let silence = vec![0.0; sample_count];
+          on_packet(qpc_position, &silence);
+        } else if !data.is_null() {
+          let samples = unsafe { std::slice::from_raw_parts(data.cast::<f32>(), sample_count) };
+          on_packet(qpc_position, samples);
+        } else {
+          return Err("WASAPI returned a null buffer for a non-silent packet".to_string());
+        };
+        buffer_guard
+          .release()
+          .map_err(|error| format!("IAudioCaptureClient::ReleaseBuffer: {error}"))?;
       }
-      unsafe { capture_client.ReleaseBuffer(frames) }
-        .map_err(|error| format!("IAudioCaptureClient::ReleaseBuffer: {error}"))?;
     }
-  }
+    Ok(())
+  })();
 
-  let _ = unsafe { audio_client.Stop() };
-  Ok(samples)
+  let stop_result = stop_guard.stop();
+  capture_result?;
+  stop_result.map_err(|error| format!("IAudioClient::Stop: {error}"))?;
+  Ok(())
 }
 
 pub fn write_wav(path: &str, samples: &[f32]) -> Result<(), String> {
@@ -239,10 +284,53 @@ fn io_error(error: std::io::Error) -> String {
   error.to_string()
 }
 
-struct EventGuard(HANDLE);
+struct EventHandle(HANDLE);
 
-impl Drop for EventGuard {
+impl Drop for EventHandle {
   fn drop(&mut self) {
     let _ = unsafe { CloseHandle(self.0) };
+  }
+}
+
+struct CaptureBufferGuard<'a> {
+  client: &'a IAudioCaptureClient,
+  frames: u32,
+  released: bool,
+}
+
+impl CaptureBufferGuard<'_> {
+  fn release(mut self) -> windows::core::Result<()> {
+    let result = unsafe { self.client.ReleaseBuffer(self.frames) };
+    self.released = result.is_ok();
+    result
+  }
+}
+
+impl Drop for CaptureBufferGuard<'_> {
+  fn drop(&mut self) {
+    if !self.released {
+      let _ = unsafe { self.client.ReleaseBuffer(self.frames) };
+    }
+  }
+}
+
+struct AudioClientStopGuard<'a> {
+  client: &'a IAudioClient,
+  stopped: bool,
+}
+
+impl AudioClientStopGuard<'_> {
+  fn stop(mut self) -> windows::core::Result<()> {
+    let result = unsafe { self.client.Stop() };
+    self.stopped = result.is_ok();
+    result
+  }
+}
+
+impl Drop for AudioClientStopGuard<'_> {
+  fn drop(&mut self) {
+    if !self.stopped {
+      let _ = unsafe { self.client.Stop() };
+    }
   }
 }
