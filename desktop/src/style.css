@@ -38,7 +38,7 @@ button {
 
 button:disabled {
   cursor: wait;
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .app-shell {
@@ -90,14 +90,14 @@ button:disabled {
 
 .brand-caption {
   margin: 1px 0 0;
-  color: #8291a7;
-  font-size: 11px;
+  color: #a9b8cb;
+  font-size: 13px;
 }
 
 .version-pill,
 .eyebrow {
-  color: #7488a4;
-  font-size: 9px;
+  color: #9aadc5;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
 }
@@ -107,7 +107,7 @@ button:disabled {
   border: 1px solid #2b3a4c;
   border-radius: 5px;
   background: #141d29;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .capture-chip,
@@ -130,8 +130,8 @@ button:disabled {
   overflow: hidden;
   padding: 8px 11px;
   border-radius: 999px;
-  color: #a7b5c8;
-  font-size: 11px;
+  color: #c3cfdd;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -199,7 +199,7 @@ button:disabled {
   border-radius: 10px;
   background: linear-gradient(135deg, #1d5d9d, #174372);
   color: #edf6ff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   box-shadow: 0 5px 18px rgb(22 93 157 / 17%);
 }
@@ -225,8 +225,8 @@ button:disabled {
 
 .workspace-heading p {
   margin: 0;
-  color: #8796aa;
-  font-size: 12px;
+  color: #aab8ca;
+  font-size: 14px;
 }
 
 .summary-count {
@@ -237,8 +237,8 @@ button:disabled {
   border: 1px solid #202c3b;
   border-radius: 10px;
   background: rgb(16 24 35 / 70%);
-  color: #8797ab;
-  font-size: 10px;
+  color: #b2bfce;
+  font-size: 12px;
 }
 
 .summary-number {
@@ -263,7 +263,7 @@ button:disabled {
   border: 1px solid #6e3c43;
   background: #321e25;
   color: #ffb5b9;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .inline-error > span,
@@ -276,7 +276,7 @@ button:disabled {
   border-radius: 50%;
   background: rgb(238 173 79 / 14%);
   color: #ffc567;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -307,8 +307,8 @@ button:disabled {
 
 .notice-banner p {
   margin: 3px 0 0;
-  color: #b5a48c;
-  font-size: 10px;
+  color: #d0c1aa;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -317,8 +317,8 @@ button:disabled {
   padding: 9px 12px;
   border: 1px solid #263748;
   background: rgb(18 31 43 / 67%);
-  color: #96aabd;
-  font-size: 10px;
+  color: #b8c8d7;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -346,7 +346,7 @@ button:disabled {
   border: 1px solid #263345;
   border-radius: 10px;
   background: #101822;
-  color: #8292a8;
+  color: #a6b6ca;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
@@ -367,17 +367,17 @@ button:disabled {
   outline: 0;
   background: transparent;
   color: #dce6f3;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .search-field input::placeholder {
-  color: #65758a;
+  color: #a0aec0;
 }
 
 .search-field button {
   border: 0;
   background: transparent;
-  color: #8292a8;
+  color: #a6b6ca;
   font-size: 18px;
 }
 
@@ -385,8 +385,8 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #a8b7c8;
-  font-size: 10px;
+  color: #c0ccda;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -397,8 +397,8 @@ button:disabled {
 }
 
 .fallback-toggle small {
-  color: #6e7e92;
-  font-size: 9px;
+  color: #a4b1c2;
+  font-size: 11px;
 }
 
 .route-card {
@@ -414,14 +414,14 @@ button:disabled {
 .route-card-head h3 {
   margin: 0;
   color: #e9f0fa;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 650;
 }
 
 .route-card-head p {
   margin: 3px 0 0;
-  color: #8090a5;
-  font-size: 10px;
+  color: #a6b5c8;
+  font-size: 12px;
 }
 
 .route-icon {
@@ -454,8 +454,8 @@ button:disabled {
   border: 1px solid #2a394b;
   border-radius: 7px;
   background: #141e2a;
-  color: #a1b1c7;
-  font-size: 10px;
+  color: #bdc9d7;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -506,8 +506,8 @@ button:disabled {
 
 .meter-value {
   min-width: 48px;
-  color: #a6b3c4;
-  font-size: 9px;
+  color: #c0ccd9;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -560,8 +560,8 @@ button:disabled {
 
 .volume-value {
   min-width: 34px;
-  color: #a9b7c9;
-  font-size: 10px;
+  color: #c1cddb;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -585,8 +585,8 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #68798e;
-  font-size: 10px;
+  color: #a0afc1;
+  font-size: 12px;
 }
 
 .empty-wave {
@@ -623,7 +623,7 @@ button:disabled {
 .muted-icon {
   border-color: #3d4654;
   background: #202834;
-  color: #a1aab7;
+  color: #c0c8d2;
 }
 
 .application-info {
@@ -641,8 +641,8 @@ button:disabled {
 .application-title-line strong,
 .excluded-item .application-info strong {
   overflow: hidden;
-  color: #d8e2ef;
-  font-size: 10px;
+  color: #e4ebf5;
+  font-size: 12px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -656,7 +656,7 @@ button:disabled {
   border-radius: 4px;
   background: #172c40;
   color: #8bbce5;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .rule-tag {
@@ -668,8 +668,8 @@ button:disabled {
 .application-subtitle {
   margin-top: 3px;
   overflow: hidden;
-  color: #77889e;
-  font-size: 9px;
+  color: #a2b1c4;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -677,7 +677,7 @@ button:disabled {
 .app-warning {
   margin-top: 4px;
   color: #f0b96c;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -694,7 +694,7 @@ button:disabled {
   padding: 0 5px;
   border-radius: 7px;
   color: #c2cfde;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .route-select:focus,
@@ -708,7 +708,7 @@ button:disabled {
   height: 27px;
   flex: none;
   border-radius: 7px;
-  color: #8c9cb0;
+  color: #b6c3d2;
   font-size: 14px;
 }
 
@@ -720,8 +720,8 @@ button:disabled {
   padding: 10px 17px;
   border-top: 1px solid #263343;
   background: rgb(10 16 24 / 36%);
-  color: #697b90;
-  font-size: 9px;
+  color: #a1afc1;
+  font-size: 11px;
 }
 
 .excluded-section {
@@ -734,19 +734,19 @@ button:disabled {
 .excluded-section h3 {
   margin: 5px 0 0;
   color: #d6d1d5;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .excluded-section h3 span {
   margin-left: 4px;
-  color: #9c8c97;
-  font-size: 10px;
+  color: #b5a7b2;
+  font-size: 12px;
 }
 
 .excluded-hint {
-  color: #887c86;
-  font-size: 9px;
+  color: #b7abb4;
+  font-size: 11px;
 }
 
 .excluded-list {
@@ -762,8 +762,8 @@ button:disabled {
 }
 
 .excluded-item .application-info span {
-  color: #847d86;
-  font-size: 9px;
+  color: #b6adb5;
+  font-size: 11px;
 }
 
 .quiet-button {
@@ -771,12 +771,12 @@ button:disabled {
   padding: 0 9px;
   border-radius: 7px;
   color: #a8b6c7;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .app-footer {
-  color: #76869a;
-  font-size: 9px;
+  color: #b0bdcd;
+  font-size: 11px;
 }
 
 .footer-status {
@@ -791,11 +791,11 @@ button:disabled {
 }
 
 .footer-separator {
-  color: #445368;
+  color: #7d8ca0;
 }
 
 .footer-note {
-  color: #69798d;
+  color: #a3b1c2;
 }
 
 .dialog-backdrop {
@@ -841,16 +841,16 @@ button:disabled {
 
 .dialog-copy {
   margin: 0 0 21px;
-  color: #8b9bb0;
-  font-size: 11px;
+  color: #b3c0d1;
+  font-size: 13px;
   line-height: 1.7;
 }
 
 .field-label {
   display: block;
   margin-bottom: 7px;
-  color: #a9b8ca;
-  font-size: 10px;
+  color: #c4cfdd;
+  font-size: 12px;
 }
 
 .dialog-select {
@@ -859,7 +859,7 @@ button:disabled {
   padding: 0 10px;
   border-radius: 8px;
   color: #d4dfed;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .file-picker-button {
@@ -904,12 +904,12 @@ button:disabled {
 
 .file-picker-button strong {
   color: #dceafa;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .file-picker-button small {
-  color: #8295ab;
-  font-size: 9px;
+  color: #aab8ca;
+  font-size: 11px;
 }
 
 .file-picker-arrow {
@@ -921,8 +921,8 @@ button:disabled {
 .dialog-error {
   margin: 14px 0 0;
   overflow-wrap: anywhere;
-  color: #6e7f94;
-  font-size: 9px;
+  color: #aab8c9;
+  font-size: 11px;
   line-height: 1.55;
 }
 
