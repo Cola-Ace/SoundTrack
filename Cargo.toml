@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/audio-capture", "desktop/src-tauri"]
+members = ["crates/audio-capture", "crates/audio-protocol", "desktop/src-tauri"]
 resolver = "3"
 
 [profile.release]

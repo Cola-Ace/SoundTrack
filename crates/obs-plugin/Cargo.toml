@@ -1,0 +1,33 @@
+[package]
+name = "soundtrack-obs-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+build = "build.rs"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+parking_lot = "0.12"
+soundtrack-audio-protocol = { path = "../audio-protocol" }
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Performance",
+  "Win32_System_IO",
+  "Win32_System_Threading",
+] }
+
+[build-dependencies]
+bindgen = "0.72"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

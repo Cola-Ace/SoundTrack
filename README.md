@@ -2,6 +2,10 @@
 
 SoundTrack is a Windows desktop app for discovering application audio sessions, assigning apps to Game, Media, and Voice routes, and monitoring their mixed levels.
 
+## User guide
+
+See the [简体中文使用指南](docs/USER_GUIDE.zh-CN.md) for the desktop app and OBS plugin setup.
+
 ## Desktop app
 
 The Tauri 2 desktop app lives in `desktop/`. From PowerShell 7:
@@ -20,7 +24,7 @@ pnpm tauri build
 
 The app stores settings at `%APPDATA%\SoundTrack\config.json`. Unconfigured apps use Game by default; route assignments, exclusions, gain, and mute settings are persisted. Closing the main window hides the app in the system tray.
 
-This desktop stage includes application discovery, Process Loopback capture workers, route mixing, and level monitoring. It does not yet provide the mixed audio to another application; the OBS source plugin and its audio receiver are outside this stage. Capture has not yet been verified on Windows hardware.
+The desktop app includes application discovery, Process Loopback capture workers, route mixing, level monitoring, and a current-user Windows named-pipe audio endpoint. The Rust OBS source plugin is in `crates/obs-plugin`; the current Windows x64 build targets OBS Studio 31.1.2 and requires the matching OBS headers and LLVM `libclang` to build. End-to-end audio capture and OBS recording have not yet been verified on Windows hardware.
 
 ## Capture prototype
 

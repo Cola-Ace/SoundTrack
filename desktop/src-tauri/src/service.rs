@@ -137,6 +137,12 @@ impl SoundTrackService {
   pub fn start(&self, app: AppHandle) {
     self.inner.engine.start();
 
+    #[cfg(windows)]
+    {
+      let engine = self.inner.engine.clone();
+      thread::spawn(move || crate::ipc::run_server(engine));
+    }
+
     let service = self.clone();
     let state_app = app.clone();
     thread::spawn(move || {

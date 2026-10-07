@@ -1,4 +1,5 @@
 /target/
+/crates/obs-plugin/target/
 /node_modules/
 /.pnpm-store/
 *.wav

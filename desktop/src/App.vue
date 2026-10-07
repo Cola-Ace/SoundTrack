@@ -332,7 +332,7 @@ onUnmounted(() => {
 
       <div class="output-note mt-5">
         <span class="output-note-icon">i</span>
-        <span>桌面端当前负责应用发现、路由和混音电平监测；此版本还没有把三路音频交给外部接收端。</span>
+        <span>桌面端会把 Game、Media、Voice 三路音频提供给配套 OBS 插件；在 OBS 中添加“SoundTrack 路由音频”源即可接收。</span>
       </div>
 
       <label class="search-field mt-5" for="application-search">
@@ -472,7 +472,7 @@ onUnmounted(() => {
           <span class="footer-separator">·</span>
           <span>增益仅作用于 SoundTrack 混音</span>
         </div>
-        <div class="footer-note">音频外部接收端尚未接入</div>
+        <div class="footer-note">OBS 输出需要配套 SoundTrack 插件</div>
       </footer>
     </div>
 

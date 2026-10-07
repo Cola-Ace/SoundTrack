@@ -3165,6 +3165,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "soundtrack-audio-protocol"
+version = "0.1.0"
+
+[[package]]
 name = "soundtrack-desktop"
 version = "0.1.0"
 dependencies = [
@@ -3173,6 +3177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "soundtrack-audio-capture",
+ "soundtrack-audio-protocol",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

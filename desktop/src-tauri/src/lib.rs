@@ -4,6 +4,8 @@ mod service;
 mod store;
 
 #[cfg(windows)]
+mod ipc;
+#[cfg(windows)]
 mod platform;
 
 use service::SoundTrackService;
