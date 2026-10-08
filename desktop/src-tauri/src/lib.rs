@@ -55,11 +55,15 @@ pub fn run() {
       setup_tray(app)?;
       Ok(())
     })
-    .on_window_event(|window, event| {
-      if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+    .on_window_event(|window, event| match event {
+      tauri::WindowEvent::CloseRequested { api, .. } => {
         api.prevent_close();
+        window.app_handle().exit(0);
+      }
+      tauri::WindowEvent::Resized(_) if window.is_minimized().unwrap_or(false) => {
         let _ = window.destroy();
       }
+      _ => {}
     })
     .invoke_handler(tauri::generate_handler![
       service::get_app_state,
@@ -72,8 +76,18 @@ pub fn run() {
       service::add_offline_application,
       service::get_config_path,
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|_, event| {
+      if let tauri::RunEvent::ExitRequested {
+        code: None,
+        api,
+        ..
+      } = event
+      {
+        api.prevent_exit();
+      }
+    });
 }
 
 fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
