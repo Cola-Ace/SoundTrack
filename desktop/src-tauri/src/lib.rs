@@ -9,7 +9,11 @@ mod ipc;
 mod platform;
 
 use service::SoundTrackService;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
+
+#[derive(Default)]
+struct MainWindowCreation(AtomicBool);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,31 +32,33 @@ pub fn run() {
       if args.iter().any(|argument| argument == "--background") {
         return;
       }
-      if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-      }
+      show_main_window(app);
     }))
     .manage(service)
+    .manage(MainWindowCreation::default())
     .setup(move |app| {
       if shutdown_mode {
         app.handle().exit(0);
         return Ok(());
       }
       service_for_setup.start(app.handle().clone());
-      setup_tray(app)?;
       if !background_mode {
-        if let Some(window) = app.get_webview_window("main") {
+        let creating = app.state::<MainWindowCreation>();
+        if !creating.0.swap(true, Ordering::AcqRel) {
+          let result = create_main_window(app.handle());
+          creating.0.store(false, Ordering::Release);
+          let window = result?;
           let _ = window.show();
           let _ = window.set_focus();
         }
       }
+      setup_tray(app)?;
       Ok(())
     })
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
-        let _ = window.hide();
+        let _ = window.destroy();
       }
     })
     .invoke_handler(tauri::generate_handler![
@@ -70,6 +76,50 @@ pub fn run() {
     .expect("error while running tauri application");
 }
 
+fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+  let config = app
+    .config()
+    .app
+    .windows
+    .iter()
+    .find(|window| window.label == "main")
+    .expect("main window is configured");
+
+  tauri::WebviewWindowBuilder::from_config(app, config)?
+    .icon(tauri::include_image!("icons/128x128.png"))?
+    .build()
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.show();
+    let _ = window.set_focus();
+    return;
+  }
+
+  let creating = app.state::<MainWindowCreation>();
+  if creating.0.swap(true, Ordering::AcqRel) {
+    return;
+  }
+
+  let app = app.clone();
+  std::thread::spawn(move || {
+    let result = create_main_window(&app);
+    app
+      .state::<MainWindowCreation>()
+      .0
+      .store(false, Ordering::Release);
+
+    match result {
+      Ok(window) => {
+        let _ = window.show();
+        let _ = window.set_focus();
+      }
+      Err(error) => eprintln!("failed to create main window: {error}"),
+    }
+  });
+}
+
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
   use tauri::menu::{Menu, MenuItem};
   use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -77,10 +127,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
   let open = MenuItem::with_id(app, "open", "打开 SoundTrack", true, None::<&str>)?;
   let exit = MenuItem::with_id(app, "exit", "退出 SoundTrack", true, None::<&str>)?;
   let menu = Menu::with_items(app, &[&open, &exit])?;
-  let icon = app
-    .default_window_icon()
-    .cloned()
-    .expect("default window icon is configured");
+  let icon = tauri::include_image!("icons/tray-icon.png");
 
   TrayIconBuilder::new()
     .icon(icon)
@@ -89,10 +136,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     .show_menu_on_left_click(false)
     .on_menu_event(|app, event| match event.id().as_ref() {
       "open" => {
-        if let Some(window) = app.get_webview_window("main") {
-          let _ = window.show();
-          let _ = window.set_focus();
-        }
+        show_main_window(app);
       }
       "exit" => app.exit(0),
       _ => {}
@@ -104,10 +148,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         ..
       } = event
       {
-        if let Some(window) = tray.app_handle().get_webview_window("main") {
-          let _ = window.show();
-          let _ = window.set_focus();
-        }
+        show_main_window(tray.app_handle());
       }
     })
     .build(app)?;

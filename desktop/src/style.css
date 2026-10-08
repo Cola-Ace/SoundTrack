@@ -402,6 +402,8 @@ button:disabled {
 }
 
 .route-card {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: 17px 17px 0;
   overflow: hidden;
@@ -716,7 +718,7 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 -17px;
+  margin: auto -17px 0;
   padding: 10px 17px;
   border-top: 1px solid #263343;
   background: rgb(10 16 24 / 36%);
