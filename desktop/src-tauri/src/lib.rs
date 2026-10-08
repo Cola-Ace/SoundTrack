@@ -13,12 +13,21 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  let background_mode = std::env::args_os().any(|argument| argument == "--background");
+  let shutdown_mode = std::env::args_os().any(|argument| argument == "--shutdown");
   let service = SoundTrackService::new().expect("failed to initialize SoundTrack configuration");
   let service_for_setup = service.clone();
 
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+    .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+      if args.iter().any(|argument| argument == "--shutdown") {
+        app.exit(0);
+        return;
+      }
+      if args.iter().any(|argument| argument == "--background") {
+        return;
+      }
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
@@ -26,8 +35,18 @@ pub fn run() {
     }))
     .manage(service)
     .setup(move |app| {
+      if shutdown_mode {
+        app.handle().exit(0);
+        return Ok(());
+      }
       service_for_setup.start(app.handle().clone());
       setup_tray(app)?;
+      if !background_mode {
+        if let Some(window) = app.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+        }
+      }
       Ok(())
     })
     .on_window_event(|window, event| {

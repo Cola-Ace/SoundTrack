@@ -1,6 +1,6 @@
 # SoundTrack OBS plugin
 
-This Windows x64 OBS module registers the `soundtrack_route_audio` audio input. Its `route` property selects Game, Media, or Voice. One receiver connection subscribes to all three routes and dispatches each frame to every OBS source configured for that route.
+This Windows x64 OBS module registers the `soundtrack_route_audio` audio input. Its `route` property selects Game, Media, or Voice. Set `SoundTrack 程序位置` on one source to the desktop executable; OBS starts it in the background after loading and closes the instance it started when OBS exits. One receiver connection subscribes to all three routes and dispatches each frame to every OBS source configured for that route.
 
 The plugin targets OBS Studio 31.1.2 and generates its libobs ABI bindings from the matching official OBS headers. Building requires Rust `x86_64-pc-windows-msvc`, LLVM `libclang`, and OBS 31.1.2 source/build headers. `OBS_INCLUDE_DIRS` must contain the `libobs` header directory and any generated OBS include directories, separated with the normal Windows path separator.
 
@@ -10,7 +10,7 @@ $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
 cargo build --release --target x86_64-pc-windows-msvc --manifest-path crates/obs-plugin/Cargo.toml
 ```
 
-The module resolves libobs functions from OBS's loaded `libobs.dll`, so an OBS import library is not required. Copy `crates\obs-plugin\target\x86_64-pc-windows-msvc\release\soundtrack_obs_plugin.dll` into the matching OBS installation's `obs-plugins\64bit` directory, then restart OBS.
+The module resolves libobs functions from OBS's loaded `obs.dll`, so an OBS import library is not required. Copy `crates\obs-plugin\target\x86_64-pc-windows-msvc\release\soundtrack_obs_plugin.dll` into the matching OBS installation's `obs-plugins\64bit` directory, then restart OBS.
 
 ## Pipe protocol v1
 

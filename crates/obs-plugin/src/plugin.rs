@@ -2,6 +2,8 @@ use std::ffi::{CStr, CString, c_char, c_void};
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::os::windows::io::AsRawHandle;
+use std::path::PathBuf;
+use std::process::{Child, Command};
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -23,9 +25,9 @@ mod bindings {
 
 use bindings::{
   SOUNDTRACK_AUDIO_FORMAT_FLOAT, SOUNDTRACK_COMBO_FORMAT_STRING, SOUNDTRACK_COMBO_TYPE_LIST,
-  SOUNDTRACK_OBS_API_VERSION, SOUNDTRACK_SOURCE_AUDIO, SOUNDTRACK_SOURCE_TYPE_INPUT,
-  SOUNDTRACK_SPEAKERS_STEREO, SOUNDTRACK_TEXT_INFO, obs_data_t, obs_module_t, obs_properties_t,
-  obs_property_t, obs_source_audio, obs_source_info, obs_source_t,
+  SOUNDTRACK_OBS_API_VERSION, SOUNDTRACK_PATH_FILE, SOUNDTRACK_SOURCE_AUDIO,
+  SOUNDTRACK_SOURCE_TYPE_INPUT, SOUNDTRACK_SPEAKERS_STEREO, SOUNDTRACK_TEXT_INFO, obs_data_t,
+  obs_module_t, obs_properties_t, obs_property_t, obs_source_audio, obs_source_info, obs_source_t,
 };
 
 type RegisterSourceFn = unsafe extern "C" fn(*const obs_source_info, usize);
@@ -48,9 +50,19 @@ type PropertiesAddTextFn = unsafe extern "C" fn(
   *const c_char,
   bindings::obs_text_type,
 ) -> *mut obs_property_t;
+type PropertiesAddPathFn = unsafe extern "C" fn(
+  *mut obs_properties_t,
+  *const c_char,
+  *const c_char,
+  bindings::obs_path_type,
+  *const c_char,
+  *const c_char,
+) -> *mut obs_property_t;
 type PropertySetDescriptionFn = unsafe extern "C" fn(*mut obs_property_t, *const c_char);
 type GetTimeNsFn = unsafe extern "C" fn() -> u64;
 type BlogFn = unsafe extern "C" fn(i32, *const c_char, ...);
+type FrontendEventCallbackFn = unsafe extern "C" fn(i32, *mut c_void);
+type FrontendEventFn = unsafe extern "C" fn(Option<FrontendEventCallbackFn>, *mut c_void);
 
 #[derive(Clone, Copy)]
 struct ObsApi {
@@ -62,9 +74,16 @@ struct ObsApi {
   properties_add_list: PropertiesAddListFn,
   property_list_add_string: PropertyListAddStringFn,
   properties_add_text: PropertiesAddTextFn,
+  properties_add_path: PropertiesAddPathFn,
   property_set_description: PropertySetDescriptionFn,
   get_time_ns: GetTimeNsFn,
   blog: Option<BlogFn>,
+}
+
+#[derive(Clone, Copy)]
+struct FrontendApi {
+  add_event_callback: FrontendEventFn,
+  remove_event_callback: FrontendEventFn,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,6 +117,7 @@ impl Route {
 struct SourceRegistration {
   source: usize,
   route: Route,
+  app_path: Option<PathBuf>,
 }
 
 struct SourceData {
@@ -109,6 +129,14 @@ struct Runtime {
   status: RwLock<String>,
   stopping: AtomicBool,
   receiver_thread: Mutex<Option<JoinHandle<()>>>,
+  finished_loading: AtomicBool,
+  app_launcher: Mutex<AppLauncher>,
+}
+
+#[derive(Default)]
+struct AppLauncher {
+  configured_path: Option<PathBuf>,
+  child: Option<Child>,
 }
 
 impl Runtime {
@@ -118,6 +146,8 @@ impl Runtime {
       status: RwLock::new("等待 SoundTrack 连接".to_string()),
       stopping: AtomicBool::new(false),
       receiver_thread: Mutex::new(None),
+      finished_loading: AtomicBool::new(false),
+      app_launcher: Mutex::new(AppLauncher::default()),
     }
   }
 
@@ -126,7 +156,67 @@ impl Runtime {
   }
 }
 
+impl AppLauncher {
+  fn update(&mut self, path: Option<PathBuf>, finished_loading: bool) {
+    if path.is_some() || self.child.is_none() {
+      if self.configured_path != path {
+        self.stop();
+        self.configured_path = path;
+      }
+    }
+    if !finished_loading || self.child.is_some() {
+      return;
+    }
+    let Some(path) = self.configured_path.as_ref() else {
+      return;
+    };
+    if !path.is_file() {
+      debug_message(&format!(
+        "SoundTrack OBS plugin: configured application path is not a file: {}",
+        path.display()
+      ));
+      return;
+    }
+
+    match Command::new(path).arg("--background").spawn() {
+      Ok(child) => self.child = Some(child),
+      Err(error) => debug_message(&format!(
+        "SoundTrack OBS plugin: failed to start {}: {error}",
+        path.display()
+      )),
+    }
+  }
+
+  fn stop(&mut self) {
+    let Some(mut child) = self.child.take() else {
+      return;
+    };
+    if matches!(child.try_wait(), Ok(Some(_))) {
+      return;
+    }
+    if let Some(path) = self.configured_path.as_ref() {
+      if let Ok(mut shutdown_request) = Command::new(path).arg("--shutdown").spawn() {
+        let _ = shutdown_request.wait();
+        for _ in 0..20 {
+          if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+          }
+          thread::sleep(Duration::from_millis(50));
+        }
+      }
+    }
+    if let Err(error) = child.kill() {
+      debug_message(&format!(
+        "SoundTrack OBS plugin: failed to stop SoundTrack: {error}"
+      ));
+    }
+    let _ = child.wait();
+  }
+}
+
 static API: OnceLock<ObsApi> = OnceLock::new();
+static FRONTEND_API: OnceLock<FrontendApi> = OnceLock::new();
+static OBS_BLOG: OnceLock<BlogFn> = OnceLock::new();
 static RUNTIME: OnceLock<Arc<Runtime>> = OnceLock::new();
 static MODULE_POINTER: AtomicPtr<obs_module_t> = AtomicPtr::new(ptr::null_mut());
 static mut SOURCE_INFO: std::mem::MaybeUninit<obs_source_info> = std::mem::MaybeUninit::uninit();
@@ -150,11 +240,27 @@ pub unsafe extern "C" fn obs_module_load() -> bool {
     }
   };
   if API.set(api).is_err() {
+    debug_message("SoundTrack OBS plugin failed to load: OBS API was initialized more than once");
+    return false;
+  }
+
+  let frontend_api = match unsafe { load_frontend_api() } {
+    Ok(api) => api,
+    Err(error) => {
+      debug_message(&format!("SoundTrack OBS plugin failed to load: {error}"));
+      return false;
+    }
+  };
+  if FRONTEND_API.set(frontend_api).is_err() {
+    debug_message(
+      "SoundTrack OBS plugin failed to load: Frontend API was initialized more than once",
+    );
     return false;
   }
 
   let runtime = Arc::new(Runtime::new());
   if RUNTIME.set(runtime.clone()).is_err() {
+    debug_message("SoundTrack OBS plugin failed to load: runtime was initialized more than once");
     return false;
   }
 
@@ -178,14 +284,20 @@ pub unsafe extern "C" fn obs_module_load() -> bool {
   let receiver_runtime = runtime.clone();
   let receiver_thread = thread::spawn(move || receiver_loop(receiver_runtime, api));
   *runtime.receiver_thread.lock() = Some(receiver_thread);
+  unsafe { (frontend_api.add_event_callback)(Some(frontend_event), ptr::null_mut()) };
   true
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn obs_module_unload() {
+  if let Some(api) = FRONTEND_API.get() {
+    unsafe { (api.remove_event_callback)(Some(frontend_event), ptr::null_mut()) };
+  }
   let Some(runtime) = RUNTIME.get() else {
     return;
   };
+  runtime.finished_loading.store(false, Ordering::Release);
+  runtime.app_launcher.lock().stop();
   runtime.stopping.store(true, Ordering::Release);
   if let Some(thread) = runtime.receiver_thread.lock().take() {
     unsafe {
@@ -196,14 +308,21 @@ pub unsafe extern "C" fn obs_module_unload() {
 }
 
 unsafe fn load_obs_api() -> Result<ObsApi, String> {
-  let module = unsafe { GetModuleHandleW(w!("libobs.dll")) }
-    .map_err(|error| format!("libobs.dll is unavailable: {error}"))?;
+  let module = unsafe { GetModuleHandleW(w!("obs.dll")) }
+    .map_err(|error| format!("obs.dll is unavailable: {error}"))?;
+  let blog = unsafe {
+    GetProcAddress(module, PCSTR(c"blog".as_ptr().cast()))
+      .map(|procedure| std::mem::transmute::<_, BlogFn>(procedure))
+  };
+  if let Some(blog) = blog {
+    let _ = OBS_BLOG.set(blog);
+  }
 
   macro_rules! resolve {
     ($name:literal, $type:ty) => {{
       let procedure =
         unsafe { GetProcAddress(module, PCSTR(concat!($name, "\0").as_ptr().cast())) }
-          .ok_or_else(|| format!("libobs.dll is missing {}", $name))?;
+          .ok_or_else(|| format!("obs.dll is missing {}", $name))?;
       let address = procedure as *const ();
       unsafe { std::mem::transmute::<*const (), $type>(address) }
     }};
@@ -218,13 +337,60 @@ unsafe fn load_obs_api() -> Result<ObsApi, String> {
     properties_add_list: resolve!("obs_properties_add_list", PropertiesAddListFn),
     property_list_add_string: resolve!("obs_property_list_add_string", PropertyListAddStringFn),
     properties_add_text: resolve!("obs_properties_add_text", PropertiesAddTextFn),
+    properties_add_path: resolve!("obs_properties_add_path", PropertiesAddPathFn),
     property_set_description: resolve!("obs_property_set_description", PropertySetDescriptionFn),
     get_time_ns: resolve!("os_gettime_ns", GetTimeNsFn),
-    blog: unsafe {
-      GetProcAddress(module, PCSTR(c"blog".as_ptr().cast()))
-        .map(|procedure| std::mem::transmute::<_, BlogFn>(procedure))
-    },
+    blog,
   })
+}
+
+unsafe fn load_frontend_api() -> Result<FrontendApi, String> {
+  let module = unsafe { GetModuleHandleW(w!("obs-frontend-api.dll")) }
+    .map_err(|error| format!("obs-frontend-api.dll is unavailable: {error}"))?;
+  macro_rules! resolve {
+    ($name:literal) => {{
+      let procedure =
+        unsafe { GetProcAddress(module, PCSTR(concat!($name, "\0").as_ptr().cast())) }
+          .ok_or_else(|| format!("obs-frontend-api.dll is missing {}", $name))?;
+      let address = procedure as *const ();
+      unsafe { std::mem::transmute::<*const (), FrontendEventFn>(address) }
+    }};
+  }
+  Ok(FrontendApi {
+    add_event_callback: resolve!("obs_frontend_add_event_callback"),
+    remove_event_callback: resolve!("obs_frontend_remove_event_callback"),
+  })
+}
+
+// Event values from the OBS 31.1.2 frontend API enum.
+const FRONTEND_EVENT_EXIT: i32 = 17;
+const FRONTEND_EVENT_FINISHED_LOADING: i32 = 26;
+
+unsafe extern "C" fn frontend_event(event: i32, _private_data: *mut c_void) {
+  let Some(runtime) = RUNTIME.get() else {
+    return;
+  };
+  match event {
+    FRONTEND_EVENT_FINISHED_LOADING => {
+      runtime.finished_loading.store(true, Ordering::Release);
+      synchronize_app_launcher(runtime);
+    }
+    FRONTEND_EVENT_EXIT => {
+      runtime.finished_loading.store(false, Ordering::Release);
+      runtime.app_launcher.lock().stop();
+    }
+    _ => {}
+  }
+}
+
+fn synchronize_app_launcher(runtime: &Runtime) {
+  let path = runtime
+    .sources
+    .lock()
+    .iter()
+    .find_map(|source| source.app_path.clone());
+  let finished_loading = runtime.finished_loading.load(Ordering::Acquire);
+  runtime.app_launcher.lock().update(path, finished_loading);
 }
 
 fn receiver_loop(runtime: Arc<Runtime>, api: ObsApi) {
@@ -347,11 +513,14 @@ unsafe extern "C" fn source_create(
     return ptr::null_mut();
   };
   let route = Route::from_c_string(unsafe { (api.data_get_string)(settings, c"route".as_ptr()) });
+  let app_path = source_app_path(settings, api);
   let registration = SourceRegistration {
     source: source as usize,
     route,
+    app_path,
   };
   runtime.sources.lock().push(registration);
+  synchronize_app_launcher(runtime);
   Box::into_raw(Box::new(SourceData {
     source: source as usize,
   }))
@@ -368,12 +537,14 @@ unsafe extern "C" fn source_destroy(data: *mut c_void) {
       .sources
       .lock()
       .retain(|source| source.source != source_data.source);
+    synchronize_app_launcher(runtime);
   }
 }
 
 unsafe extern "C" fn source_defaults(settings: *mut obs_data_t) {
   if let Some(api) = API.get() {
     unsafe { (api.data_set_default_string)(settings, c"route".as_ptr(), c"game".as_ptr()) };
+    unsafe { (api.data_set_default_string)(settings, c"app_path".as_ptr(), c"".as_ptr()) };
   }
 }
 
@@ -401,6 +572,34 @@ unsafe extern "C" fn source_properties(_data: *mut c_void) -> *mut obs_propertie
       (api.property_list_add_string)(route, c"Media".as_ptr(), c"media".as_ptr());
       (api.property_list_add_string)(route, c"Voice".as_ptr(), c"voice".as_ptr());
     }
+  }
+
+  unsafe {
+    (api.properties_add_path)(
+      properties,
+      c"app_path".as_ptr(),
+      c"SoundTrack 程序位置".as_ptr(),
+      SOUNDTRACK_PATH_FILE,
+      c"SoundTrack 程序 (*.exe);;可执行文件 (*.exe)".as_ptr(),
+      ptr::null(),
+    );
+  }
+
+  let app_path_description = unsafe {
+    (api.properties_add_text)(
+      properties,
+      c"soundtrack_app_path_info".as_ptr(),
+      c"自动启动与退出".as_ptr(),
+      SOUNDTRACK_TEXT_INFO,
+    )
+  };
+  if !app_path_description.is_null() {
+    unsafe {
+      (api.property_set_description)(
+        app_path_description,
+        c"所有路由源共用该程序位置。OBS 完成加载后启动；退出 OBS 时关闭本插件启动的实例。".as_ptr(),
+      )
+    };
   }
 
   let status = RUNTIME
@@ -433,27 +632,48 @@ unsafe extern "C" fn source_update(data: *mut c_void, settings: *mut obs_data_t)
   };
   let source_data = unsafe { &mut *data.cast::<SourceData>() };
   let route = Route::from_c_string(unsafe { (api.data_get_string)(settings, c"route".as_ptr()) });
-  if let Some(registration) = runtime
-    .sources
-    .lock()
-    .iter_mut()
-    .find(|source| source.source == source_data.source)
+  let app_path = source_app_path(settings, api);
   {
-    registration.route = route;
+    if let Some(registration) = runtime
+      .sources
+      .lock()
+      .iter_mut()
+      .find(|source| source.source == source_data.source)
+    {
+      registration.route = route;
+      registration.app_path = app_path;
+    }
   }
+  synchronize_app_launcher(runtime);
+}
+
+fn source_app_path(settings: *mut obs_data_t, api: &ObsApi) -> Option<PathBuf> {
+  let value = unsafe { (api.data_get_string)(settings, c"app_path".as_ptr()) };
+  if value.is_null() {
+    return None;
+  }
+  let value = unsafe { CStr::from_ptr(value) }.to_string_lossy();
+  let value = value.trim();
+  (!value.is_empty()).then(|| PathBuf::from(value))
 }
 
 fn debug_message(message: &str) {
   let message = CString::new(message).unwrap_or_else(|_| c"SoundTrack OBS plugin error".to_owned());
-  if let Some(api) = API.get() {
-    if let Some(blog) = api.blog {
-      unsafe { blog(100, c"%s".as_ptr(), message.as_ptr()) };
-    } else {
-      unsafe { OutputDebugStringA(PCSTR(message.as_ptr().cast())) };
-    }
-  } else {
-    unsafe { OutputDebugStringA(PCSTR(message.as_ptr().cast())) };
+  let message_text = message.to_string_lossy();
+  if let Some(blog) = API
+    .get()
+    .and_then(|api| api.blog)
+    .or_else(|| OBS_BLOG.get().copied())
+  {
+    unsafe { blog(100, c"%s".as_ptr(), message.as_ptr()) };
   }
+  let log_path = std::env::temp_dir().join("soundtrack-obs-plugin.log");
+  let _ = OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(log_path)
+    .and_then(|mut file| writeln!(file, "{message_text}"));
+  unsafe { OutputDebugStringA(PCSTR(message.as_ptr().cast())) };
 }
 
 fn log_message(api: ObsApi, level: i32, message: &str) {

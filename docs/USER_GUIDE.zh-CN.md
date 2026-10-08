@@ -7,7 +7,7 @@ SoundTrack 由桌面端和 OBS 插件组成：桌面端发现正在播放声音�
 ## 使用前准备
 
 - Windows x64。项目当前记录的音频捕获最低系统版本为 Windows build 20348；Windows 10 22H2 build 19045 低于该要求，建议使用 Windows 11。
-- SoundTrack 桌面端需要保持运行，才能捕获、混音并向 OBS 提供音频。
+- SoundTrack 桌面端负责捕获和混音。配置 OBS 插件中的程序位置后，插件会在 OBS 加载完成时启动它。
 - OBS Studio 31.1.2 x64，以及匹配的 SoundTrack OBS 插件。
 - SoundTrack 和 OBS 在同一 Windows 用户账户下运行。
 
@@ -15,7 +15,7 @@ SoundTrack 由桌面端和 OBS 插件组成：桌面端发现正在播放声音�
 
 如果你拿到的是 SoundTrack 安装包（MSI 或 NSIS），运行安装程序并按向导完成安装。开发者可按文末的构建步骤生成安装包；产物位于 `desktop\src-tauri\target\release\bundle` 下的 `msi` 或 `nsis` 目录。NSIS 安装包默认安装到当前 Windows 用户。
 
-启动 SoundTrack 后，应用发现、音频捕获、路由混音和本地 OBS 音频连接会自动启动。主窗口顶部显示捕获状态；“音频捕获已就绪”表示当前捕获探测通过。
+手动启动 SoundTrack 时，应用发现、音频捕获、路由混音和本地 OBS 音频连接会自动启动。主窗口顶部显示捕获状态；“音频捕获已就绪”表示当前捕获探测通过。OBS 插件启动的实例不会显示主窗口，会留在系统托盘；正常退出 OBS 时，该实例也会退出。
 
 关闭主窗口会将 SoundTrack 收到系统托盘，后台服务仍会运行。左键单击托盘图标或右键菜单中的“打开 SoundTrack”可重新显示窗口；要停止后台服务，请在托盘菜单中选择“退出 SoundTrack”。
 
@@ -60,21 +60,21 @@ SoundTrack 会保存该程序的完整路径，并在它运行后应用路由。
 
    `E:\downloads\OBS-Studio-31.1.2-Windows-x64\obs-plugins\64bit\soundtrack_obs_plugin.dll`
 
-4. 启动 SoundTrack，再启动 OBS。OBS 在启动时加载插件；若 OBS 已经打开，复制 DLL 后需要重启 OBS。
+4. 启动 OBS。OBS 在启动时加载插件；若 OBS 已经打开，复制 DLL 后需要重启 OBS。
 
 ### 添加路由音频源
 
 1. 在 OBS 的“来源”面板点击“＋”。
 2. 选择“SoundTrack 路由音频”。
-3. 在源属性的“路由”下拉框中选择 Game、Media 或 Voice。
+3. 在源属性的“SoundTrack 程序位置”中选择桌面端可执行文件，在“路由”下拉框中选择 Game、Media 或 Voice。所有 SoundTrack 路由源共用该程序位置，只需在一个源中配置。
 4. 若要在 OBS 混音器中分别控制三路，请创建三个来源，并分别选择 Game、Media 和 Voice。
 
-SoundTrack 插件会自动尝试连接桌面端；如果插件先启动，桌面端稍后启动时也会自动重连。源属性中的状态文字可用于查看连接情况：
+配置程序位置后，SoundTrack 插件会在 OBS 完成加载时静默启动桌面端；如果 OBS 已经运行，修改源属性并应用后也会启动。插件会自动连接桌面端；源属性中的状态文字可用于查看连接情况：
 
 - “等待 SoundTrack 连接”：尚未连上桌面端。
 - “已连接 SoundTrack”：插件已连上桌面端。
 
-确认桌面端的对应路由有电平后，OBS 中同一路由的音频源才会收到音频。之后可像其他 OBS 音频源一样将它用于录制或直播。
+如果 SoundTrack 在 OBS 启动前已经由用户手动打开，插件不会抢到前台；OBS 退出时也不会关闭这个手动启动的实例。确认桌面端的对应路由有电平后，OBS 中同一路由的音频源才会收到音频。之后可像其他 OBS 音频源一样将它用于录制或直播。
 
 ## 常见问题
 
@@ -92,7 +92,7 @@ SoundTrack 插件会自动尝试连接桌面端；如果插件先启动，桌面
 
 ### OBS 源显示等待连接或没有电平
 
-确认 SoundTrack 桌面端仍在运行，并且 OBS 与 SoundTrack 使用同一 Windows 用户账户。再检查桌面端捕获状态、目标应用是否有声音、应用所在路由是否正确，以及 OBS 源选中的路由是否与桌面端一致。
+检查 OBS 源属性中的 SoundTrack 程序位置是否指向有效的桌面端可执行文件，并确认 OBS 与 SoundTrack 使用同一 Windows 用户账户。再检查桌面端捕获状态、目标应用是否有声音、应用所在路由是否正确，以及 OBS 源选中的路由是否与桌面端一致。
 
 ## 从源码启动和构建
 

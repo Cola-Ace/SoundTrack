@@ -24,11 +24,11 @@ fn main() {
     .default_enum_style(bindgen::EnumVariation::Consts)
     .prepend_enum_name(false)
     .allowlist_type(
-      "obs_source_info|obs_source_audio|obs_source_t|obs_data_t|obs_module_t|obs_properties_t|obs_property_t|obs_source_type|speaker_layout|audio_format|obs_text_type|obs_combo_type|obs_combo_format|soundtrack_obs_bindings",
+      "obs_source_info|obs_source_audio|obs_source_t|obs_data_t|obs_module_t|obs_properties_t|obs_property_t|obs_source_type|speaker_layout|audio_format|obs_text_type|obs_path_type|obs_combo_type|obs_combo_format|soundtrack_obs_bindings",
     )
     .allowlist_var("SOUNDTRACK_.*")
     .allowlist_function(
-      "obs_register_source_s|obs_source_output_audio|obs_data_get_string|obs_data_set_default_string|obs_properties_create|obs_properties_add_list|obs_property_list_add_string|obs_properties_add_text|obs_property_set_description|os_gettime_ns",
+      "obs_register_source_s|obs_source_output_audio|obs_data_get_string|obs_data_set_default_string|obs_properties_create|obs_properties_add_list|obs_property_list_add_string|obs_properties_add_text|obs_properties_add_path|obs_property_set_description|os_gettime_ns",
     )
     .layout_tests(false)
     .generate_comments(false)
