@@ -10,7 +10,8 @@ use tauri::{AppHandle, Emitter, State};
 use crate::audio::{AudioEngine, AudioPacket};
 use crate::model::{
   AppConfig, AppSnapshot, ApplicationRule, ApplicationSummary, DetectedApplication, Route,
-  RouteMeter, RouteSummary, is_internal_process_name, normalized_path, resolve_route,
+  RouteMeter, RouteSummary, is_internal_process_name, is_shell_process_name, normalized_path,
+  resolve_route,
 };
 use crate::store::ConfigStore;
 
@@ -345,7 +346,7 @@ impl SoundTrackService {
     drop(worker_errors);
 
     for rule in &config.rules {
-      if seen.contains(&rule.id) || is_internal_rule(rule) {
+      if seen.contains(&rule.id) || is_hidden_rule(rule) {
         continue;
       }
       let detected_rule = DetectedApplication {
@@ -505,6 +506,9 @@ impl SoundTrackService {
       .file_name()
       .and_then(|name| name.to_str())
       .map(str::to_string);
+    if file_name.as_deref().is_some_and(is_shell_process_name) {
+      return Err("Explorer 属于系统外壳，不参与应用音频捕获；请选择需要录制的应用".to_string());
+    }
     let identity = normalized_path(&executable_path);
     let rule = ApplicationRule {
       id: identity,
@@ -590,6 +594,10 @@ impl CapturePlan {
     let mut pid_to_application = HashMap::<u32, usize>::new();
     for (index, application) in detected.iter().enumerate() {
       if is_internal_application(application)
+        || application
+          .file_name
+          .as_deref()
+          .is_some_and(is_shell_process_name)
         || application.process_ancestors.values().any(|ancestors| {
           ancestors
             .iter()
@@ -823,11 +831,16 @@ fn is_internal_application(application: &DetectedApplication) -> bool {
     || application.pids.contains(&std::process::id())
 }
 
-fn is_internal_rule(rule: &ApplicationRule) -> bool {
+fn is_hidden_rule(rule: &ApplicationRule) -> bool {
   rule
     .file_name
     .as_deref()
     .is_some_and(is_internal_process_name)
+    || rule
+      .file_name
+      .as_deref()
+      .or_else(|| rule.executable_path.as_deref()?.rsplit(['\\', '/']).next())
+      .is_some_and(is_shell_process_name)
 }
 
 fn build_capture_plan(detected: &[DetectedApplication], config: &AppConfig) -> CapturePlan {
@@ -922,4 +935,94 @@ pub fn add_offline_application(
 #[tauri::command]
 pub fn get_config_path(service: State<'_, SoundTrackService>) -> String {
   service.inner.config.path().to_string_lossy().into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn application(name: &str, pid: u32, ancestors: &[u32]) -> DetectedApplication {
+    DetectedApplication {
+      id: name.to_string(),
+      name: name.to_string(),
+      executable_path: Some(format!("C:\\Apps\\{name}")),
+      file_name: Some(name.to_string()),
+      pids: vec![pid],
+      process_ancestors: BTreeMap::from([(pid, ancestors.to_vec())]),
+      session_count: 1,
+      ..DetectedApplication::default()
+    }
+  }
+
+  fn rule(app: &DetectedApplication, route: Route) -> ApplicationRule {
+    ApplicationRule {
+      id: app.id.clone(),
+      executable_path: app.executable_path.clone(),
+      file_name: app.file_name.clone(),
+      window_title: None,
+      window_class: None,
+      route: Some(route),
+      excluded: false,
+      file_name_fallback: false,
+    }
+  }
+
+  #[test]
+  fn explorer_does_not_capture_or_block_independent_applications() {
+    let shell = application("Explorer.EXE", 100, &[]);
+    let teamspeak = application("ts3client_win64.exe", 101, &[100]);
+    let voice_child = application("voice-helper.exe", 102, &[101, 100]);
+    let game = application("game.exe", 103, &[100]);
+    for legacy_route in [None, Some(Route::Game), Some(Route::Media)] {
+      let mut config = AppConfig::default();
+      config.rules.push(rule(&teamspeak, Route::Voice));
+      if let Some(route) = legacy_route {
+        config.rules.push(rule(&shell, route));
+      }
+      let plan = build_capture_plan(
+        &[
+          shell.clone(),
+          teamspeak.clone(),
+          voice_child.clone(),
+          game.clone(),
+        ],
+        &config,
+      );
+      assert_eq!(plan.hidden, HashSet::from([shell.id.clone()]));
+      assert_eq!(
+        plan.roots,
+        HashMap::from([
+          (101, (teamspeak.id.clone(), Route::Voice)),
+          (103, (game.id.clone(), Route::Game)),
+        ])
+      );
+      for app in [&teamspeak, &voice_child, &game] {
+        assert!(plan.routes[&app.id].conflict.is_none());
+      }
+      assert_eq!(plan.routes[&voice_child.id].route, Route::Voice);
+    }
+  }
+
+  #[test]
+  fn real_application_tree_conflicts_still_pause_capture() {
+    let parent = application("parent.exe", 100, &[]);
+    let child = application("child.exe", 101, &[100]);
+    let mut config = AppConfig::default();
+    config.rules = vec![rule(&parent, Route::Media), rule(&child, Route::Voice)];
+    let plan = build_capture_plan(&[parent.clone(), child.clone()], &config);
+    assert!(plan.roots.is_empty());
+    assert!(plan.routes[&parent.id].conflict.is_some());
+    assert!(plan.routes[&child.id].conflict.is_some());
+  }
+
+  #[test]
+  fn legacy_explorer_rules_are_hidden_even_when_offline() {
+    let shell = application("Explorer.EXE", 100, &[]);
+    let mut legacy = rule(&shell, Route::Game);
+    assert!(is_hidden_rule(&legacy));
+    legacy.file_name = None;
+    assert!(is_hidden_rule(&legacy));
+    let teamspeak = application("ts3client_win64.exe", 101, &[100]);
+    assert!(!is_hidden_rule(&rule(&teamspeak, Route::Voice)));
+  }
 }

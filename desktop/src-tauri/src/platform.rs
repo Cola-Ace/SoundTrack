@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, LPARAM, TRUE};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, LPARAM, S_OK, TRUE};
 use windows::Win32::Media::Audio::{
   AudioSessionStateExpired, DEVICE_STATE_ACTIVE, IAudioSessionControl2, IAudioSessionManager2,
   IMMDeviceEnumerator, MMDeviceEnumerator, eRender,
@@ -21,7 +21,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BOOL, Interface, PWSTR};
 
-use crate::model::{DetectedApplication, is_internal_process_name, normalized_path};
+use crate::model::{
+  DetectedApplication, is_internal_process_name, is_shell_process_name, normalized_path,
+};
 
 struct ComGuard;
 
@@ -92,6 +94,9 @@ pub fn discover_applications() -> Result<Vec<DetectedApplication>, String> {
       let Ok(session_control) = session.cast::<IAudioSessionControl2>() else {
         continue;
       };
+      if unsafe { session_control.IsSystemSoundsSession() } == S_OK {
+        continue;
+      }
       let Ok(pid) = (unsafe { session_control.GetProcessId() }) else {
         continue;
       };
@@ -109,6 +114,7 @@ pub fn discover_applications() -> Result<Vec<DetectedApplication>, String> {
       let process_ancestors = ancestors(pid, &catalog.parent_pids);
       if pid == std::process::id()
         || file_name.as_deref().is_some_and(is_internal_process_name)
+        || file_name.as_deref().is_some_and(is_shell_process_name)
         || process_ancestors.iter().any(|ancestor| {
           catalog
             .file_names

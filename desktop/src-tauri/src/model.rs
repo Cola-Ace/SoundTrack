@@ -175,6 +175,10 @@ pub fn is_internal_process_name(name: &str) -> bool {
   )
 }
 
+pub fn is_shell_process_name(name: &str) -> bool {
+  name.eq_ignore_ascii_case("explorer.exe")
+}
+
 pub fn rule_match_score(
   rule: &ApplicationRule,
   app: &DetectedApplication,
