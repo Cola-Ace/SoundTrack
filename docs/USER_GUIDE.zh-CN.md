@@ -13,11 +13,11 @@ SoundTrack 由桌面端和 OBS 插件组成：桌面端发现正在播放声音�
 
 ## 启动 SoundTrack 桌面端
 
-如果你拿到的是 SoundTrack 安装包（MSI 或 NSIS），运行安装程序并按向导完成安装。开发者可按文末的构建步骤生成安装包；产物位于 `desktop\src-tauri\target\release\bundle` 下的 `msi` 或 `nsis` 目录。NSIS 安装包默认安装到当前 Windows 用户。
+如果你拿到的是 SoundTrack 安装包（MSI 或 NSIS），运行安装程序并按向导完成安装。开发者可按文末的构建步骤生成安装包；使用默认 Cargo 输出目录时，产物位于仓库根目录 `target\release\bundle` 下的 `msi` 或 `nsis` 目录。NSIS 安装包默认安装到当前 Windows 用户。
 
 手动启动 SoundTrack 时，应用发现、音频捕获、路由混音和本地 OBS 音频连接会自动启动。主窗口顶部显示捕获状态；“音频捕获已就绪”表示当前捕获探测通过。OBS 插件启动的实例不会显示主窗口，会留在系统托盘；正常退出 OBS 时，该实例也会退出。
 
-关闭主窗口会将 SoundTrack 收到系统托盘，后台服务仍会运行。左键单击托盘图标或右键菜单中的“打开 SoundTrack”可重新显示窗口；要停止后台服务，请在托盘菜单中选择“退出 SoundTrack”。
+最小化主窗口会将 SoundTrack 收到系统托盘，后台服务仍会运行。左键单击托盘图标或右键菜单中的“打开 SoundTrack”可重新显示窗口；关闭主窗口或在托盘菜单中选择“退出 SoundTrack”会退出应用。
 
 应用配置会自动保存到 `%APPDATA%\SoundTrack\config.json`，无需手动保存。
 
@@ -60,7 +60,7 @@ SoundTrack 会保存该程序的完整路径，并在它运行后应用路由。
 
 3. 将 DLL 复制到 OBS 安装目录下的 `obs-plugins\64bit` 文件夹。例如：
 
-   `E:\downloads\OBS-Studio-31.1.2-Windows-x64\obs-plugins\64bit\soundtrack_obs_plugin.dll`
+   `C:\Program Files\obs-studio\obs-plugins\64bit\soundtrack_obs_plugin.dll`
 
 4. 启动 OBS。OBS 在启动时加载插件；若 OBS 已经打开，复制 DLL 后需要重启 OBS。
 
