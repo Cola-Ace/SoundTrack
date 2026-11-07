@@ -75,6 +75,8 @@ pub fn capture_stream(
     return Err("PID must be greater than zero".to_string());
   }
 
+  crate::CaptureSupport::current().ensure_supported()?;
+
   unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
     .ok()
     .map_err(|error| format!("CoInitializeEx: {error}"))?;

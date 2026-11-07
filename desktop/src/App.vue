@@ -33,6 +33,7 @@ interface RouteSummary {
 }
 
 interface AppSnapshot {
+  captureSupported: boolean;
   captureAvailable: boolean;
   captureError: string | null;
   fileNameFallbackEnabled: boolean;
@@ -292,7 +293,7 @@ onUnmounted(() => {
         <div class="header-actions flex items-center gap-3">
           <div class="capture-chip" :class="snapshot?.captureAvailable ? 'is-live' : 'is-limited'">
             <span class="status-light"></span>
-            <span>{{ snapshot?.captureAvailable ? "音频捕获已就绪" : (snapshot?.captureError ?? "正在连接音频服务") }}</span>
+            <span>{{ snapshot?.captureAvailable ? "音频捕获已就绪" : !snapshot ? "正在连接音频服务" : snapshot.captureSupported ? "音频捕获尚未就绪" : "系统版本不支持捕获" }}</span>
           </div>
           <button class="icon-button" type="button" title="刷新应用列表" :disabled="isRefreshing" @click="refresh">
             <span :class="{ spinning: isRefreshing }">↻</span>
@@ -324,10 +325,10 @@ onUnmounted(() => {
       <div v-if="snapshot?.captureError" class="notice-banner mt-5">
         <span class="notice-icon">!</span>
         <div>
-          <strong>音频捕获尚未就绪</strong>
-          <p>{{ snapshot.captureError }}。应用列表仍会持续扫描；确认 Windows 版本和音频服务后可重试。</p>
+          <strong>{{ snapshot.captureSupported ? "音频捕获尚未就绪" : "系统版本不支持按应用捕获" }}</strong>
+          <p>{{ snapshot.captureError }}</p>
         </div>
-        <button type="button" class="quiet-button" :disabled="isRefreshing" @click="refresh">重试</button>
+        <button v-if="snapshot.captureSupported" type="button" class="quiet-button" :disabled="isRefreshing" @click="refresh">重试</button>
       </div>
 
       <div class="output-note mt-5">

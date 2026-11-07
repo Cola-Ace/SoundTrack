@@ -2,7 +2,7 @@
 compile_error!("the Process Loopback prototype requires Windows");
 
 #[cfg(windows)]
-use soundtrack_audio_capture::{capture, write_wav};
+use soundtrack_audio_capture::{CaptureSupport, capture, probe_capture, write_wav};
 
 #[cfg(windows)]
 fn main() {
@@ -15,9 +15,19 @@ fn main() {
 #[cfg(windows)]
 fn run() -> Result<(), String> {
   let mut args = std::env::args().skip(1);
-  let pid = args
-    .next()
-    .ok_or_else(|| "usage: soundtrack-audio-capture <PID> [seconds] [output.wav]".to_string())?
+  let target = args.next().ok_or_else(|| {
+    "usage: soundtrack-audio-capture <PID> [seconds] [output.wav] | --check".to_string()
+  })?;
+  if target == "--check" {
+    if args.next().is_some() {
+      return Err("usage: soundtrack-audio-capture --check".to_string());
+    }
+    println!("{}", CaptureSupport::current().windows_version);
+    probe_capture()?;
+    println!("Process Loopback initialization succeeded (per-application capture).");
+    return Ok(());
+  }
+  let pid = target
     .parse::<u32>()
     .map_err(|error| format!("invalid PID: {error}"))?;
   if pid == 0 {

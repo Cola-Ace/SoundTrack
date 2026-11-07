@@ -6,7 +6,7 @@ SoundTrack 由桌面端和 OBS 插件组成：桌面端发现正在播放声音�
 
 ## 使用前准备
 
-- Windows x64。项目当前记录的音频捕获最低系统版本为 Windows build 20348；Windows 10 22H2 build 19045 低于该要求，建议使用 Windows 11。
+- Windows x64：更新后的 Windows 10 2004（build 19041）及以上版本，或 Windows 11。Windows 10 22H2（包括 19045.6466）满足版本要求。
 - SoundTrack 桌面端负责捕获和混音。配置 OBS 插件中的程序位置后，插件会在 OBS 加载完成时启动它。
 - OBS Studio 31.1.2 x64，以及匹配的 SoundTrack OBS 插件。
 - SoundTrack 和 OBS 在同一 Windows 用户账户下运行。
@@ -80,7 +80,14 @@ SoundTrack 会保存该程序的完整路径，并在它运行后应用路由。
 
 ### 桌面端提示音频捕获未就绪
 
-应用列表仍会扫描。确认 Windows 版本满足上面的要求，并让目标应用实际播放声音，然后点击顶部刷新按钮或提示栏中的“重试”。
+应用列表仍会扫描。程序根据系统版本判断是否可以尝试按应用捕获，并实际初始化 Process Loopback 接口：
+
+- 低于 Windows 10 2004（build 19041）：显示当前系统版本和升级要求，不启动音频捕获，也不会改为录制整个播放设备的混音。
+- Windows 10 2004 及以上和 Windows 11：使用相同的 Process Loopback 按进程树捕获。若初始化失败，提示会包含系统版本和具体错误；安装可用的 Windows 更新、检查 Windows Audio 服务后，点击“重试”。
+
+该版本门槛与 [OBS 31.1.2 的实现](https://github.com/obsproject/obs-studio/blob/31.1.2/plugins/win-wasapi/plugin-main.cpp#L35-L50) 一致。微软文档标注的最低 build 20348 与 OBS 在更新后的 Win10 上实际采用的门槛不同。
+
+开发环境可运行 `cargo run -p soundtrack-audio-capture -- --check` 查看系统版本并检查接口初始化。检查通过后，还需要让目标应用播放声音，确认对应路由有电平并在 OBS 中录制验证；初始化成功不代表已经验证真实音频和应用隔离。
 
 ### 应用没有出现在列表中
 

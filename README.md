@@ -28,7 +28,13 @@ The desktop app includes application discovery, Process Loopback capture workers
 
 ## Capture prototype
 
-The standalone CLI remains available as a capture diagnostic. On Windows build 20348 or later, run:
+The standalone CLI remains available as a capture diagnostic. On an updated Windows 10 2004 (build 19041) or later, including Windows 10 22H2 and Windows 11, check the system and initialize the capture API with:
+
+```powershell
+cargo run -p soundtrack-audio-capture -- --check
+```
+
+Then capture a playing application:
 
 ```powershell
 cargo run -p soundtrack-audio-capture -- <PID> [seconds] [output.wav]
@@ -40,4 +46,6 @@ For example:
 cargo run -p soundtrack-audio-capture -- 1234 10 capture.wav
 ```
 
-The CLI uses WASAPI Process Loopback in include-process-tree mode and requests 48 kHz, stereo, Float32 audio. It does not change the target application's playback volume. Windows 10 22H2 is below the documented minimum and must be tested separately; parent/child routing isolation also remains an acceptance gate.
+The CLI uses WASAPI Process Loopback in include-process-tree mode and requests 48 kHz, stereo, Float32 audio. It does not change the target application's playback volume. Both Windows 10 and Windows 11 use this same capture API. The build 19041 gate follows [OBS 31.1.2](https://github.com/obsproject/obs-studio/blob/31.1.2/plugins/win-wasapi/plugin-main.cpp#L35-L50); Microsoft's documented minimum remains build 20348. Runtime initialization is checked separately, since the version gate alone does not establish API availability on an unpatched system.
+
+Older systems receive an explicit unsupported-system error before capture initialization. There is no device-loopback fallback: recording a device's entire mix would lose per-application isolation. `--check` verifies initialization only; actual audio delivery, parent/child isolation, and OBS recording still require end-to-end verification.

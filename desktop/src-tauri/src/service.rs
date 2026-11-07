@@ -113,9 +113,12 @@ impl SoundTrackService {
     let config = ConfigStore::load()?;
     let initial_config = config.get()?;
     let config_path = config.path().to_string_lossy().into_owned();
+    let support_error = capture_system_support().err();
+    let initial_error = support_error.or_else(|| Some("正在检测音频捕获能力".to_string()));
     let snapshot = AppSnapshot {
+      capture_supported: capture_system_support().is_ok(),
       capture_available: false,
-      capture_error: Some("正在检测音频捕获能力".to_string()),
+      capture_error: initial_error.clone(),
       file_name_fallback_enabled: initial_config.file_name_fallback_enabled,
       applications: Vec::new(),
       routes: Vec::new(),
@@ -125,7 +128,7 @@ impl SoundTrackService {
       inner: Arc::new(ServiceInner {
         config,
         snapshot: RwLock::new(snapshot),
-        capture_probe_error: Mutex::new(Some("正在检测音频捕获能力".to_string())),
+        capture_probe_error: Mutex::new(initial_error),
         capture_probe_running: AtomicBool::new(false),
         engine: AudioEngine::new(initial_config.routes),
         capture_workers: parking_lot::Mutex::new(HashMap::new()),
@@ -200,6 +203,10 @@ impl SoundTrackService {
   }
 
   fn probe_capture_async(&self) {
+    if let Err(error) = capture_system_support() {
+      self.set_capture_probe(Some(error));
+      return;
+    }
     if self
       .inner
       .capture_probe_running
@@ -278,6 +285,7 @@ impl SoundTrackService {
       .collect();
     let capture_error = capability_error.or(discovery_error);
     let snapshot = AppSnapshot {
+      capture_supported: capture_system_support().is_ok(),
       capture_available: capture_error.is_none(),
       capture_error,
       file_name_fallback_enabled: config.file_name_fallback_enabled,
@@ -826,10 +834,21 @@ fn build_capture_plan(detected: &[DetectedApplication], config: &AppConfig) -> C
   CapturePlan::build(detected, config)
 }
 
+fn capture_system_support() -> Result<(), String> {
+  #[cfg(windows)]
+  {
+    soundtrack_audio_capture::CaptureSupport::current().ensure_supported()
+  }
+  #[cfg(not(windows))]
+  {
+    Err("SoundTrack 音频捕获目前仅支持 Windows".to_string())
+  }
+}
+
 fn probe_capture() -> Result<(), String> {
   #[cfg(windows)]
   {
-    soundtrack_audio_capture::capture_stream(std::process::id(), || false, |_, _| {})
+    soundtrack_audio_capture::probe_capture()
   }
   #[cfg(not(windows))]
   {

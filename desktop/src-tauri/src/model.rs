@@ -151,6 +151,7 @@ pub struct RouteMeter {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSnapshot {
+  pub capture_supported: bool,
   pub capture_available: bool,
   pub capture_error: Option<String>,
   pub file_name_fallback_enabled: bool,
